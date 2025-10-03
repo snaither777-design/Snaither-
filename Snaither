@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Hub
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-familetica, sans-serif; padding:28px; background:#f5f7fb; }
+    .card { background:white; padding:18px; border-radius:10px; box-shadow:0 8px 30px rgba(10,20,30,0.06); width:420px; margin:auto; text-align:center;}
+    button { margin:8px; padding:10px 14px; border-radius:8px; border: none; cursor:pointer; }
+    .primary { background:#2563eb; color:white; }
+    .muted { background:#6b7280; color:white; }
+    .success { background:#10b981; color:white; }
+    .danger { background:#ef4444; color:white; }
+    #output { margin-top:12px; color:#374151; min-height:48px; word-break:break-word; }
+    input[type="password"] { padding:8px; width:90%; margin-top:8px; border-radius:6px; border:1px solid #d1d5db; }
+    small { color:#6b7280; }
+    code { background:#f3f4f6; padding:2px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>HUB</h2>
+    <button class="primary" id="btnEntrar">Entrar</button>
+    <button class="muted" id="btnKey">Conseguir key</button>
+    <button class="danger" id="btnAbrir">Abrir</button>
+
+    <div id="output"><small>Pulsa "Conseguir key" para descargar y copiar la página remota.</small></div>
+  </div>
+
+  <script>
+    const TARGET_URL = "https://scriptsnaizz.blogspot.com/2025/10/script-key-aqui.html";
+    const PROXY_LOCAL = "http://127.0.0.1:5000/fetch?url=" + encodeURIComponent(TARGET_URL);
+    const KNOWN_KEY = "snaither";
+    const output = document.getElementById('output');
+
+    document.getElementById('btnEntrar').onclick = () => {
+      output.innerHTML = "<strong>Entrar:</strong> Bienvenido (simulación).";
+    };
+
+    document.getElementById('btnKey').onclick = async () => {
+      output.innerHTML = "🔄 Intentando descargar la página remota...";
+
+      // 1) Intento directo (puede fallar por CORS)
+      try {
+        const resp = await fetch(TARGET_URL, { method: 'GET', mode: 'cors' });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const text = await resp.text();
+        await handleDownloadedText(text, "descarga directa");
+        return;
+      } catch (err) {
+        console.warn("Error descarga directa:", err);
+        output.innerHTML = "⚠️ No se pudo descargar directamente (probable CORS). Intentando proxy local...";
+      }
+
+      // 2) Intento proxy local (necesitas ejecutar proxy_fetch.py en tu PC)
+      try {
+        const resp2 = await fetch(PROXY_LOCAL, { method: 'GET', mode: 'cors' });
+        if (!resp2.ok) throw new Error("Proxy HTTP " + resp2.status);
+        const text2 = await resp2.text();
+        await handleDownloadedText(text2, "proxy local");
+        return;
+      } catch (err2) {
+        console.error("Error proxy local:", err2);
+        output.innerHTML = `
+          <div>
+            <strong style="color:#b91c1c">✖ No se pudo obtener la página automáticamente.</strong>
+            <div style="text-align:left;margin-top:8px">
+              <ol>
+                <li>Pulsa <button id="openPage" class="primary">Abrir página</button> y copia manualmente.</li>
+                <li>O ejecuta el proxy local en tu máquina (instrucciones abajo) y vuelve a intentarlo.</li>
+              </ol>
+            </div>
+          </div>`;
+        document.getElementById('openPage').onclick = () => window.open(TARGET_URL, "_blank");
+        return;
+      }
+    };
+
+    async function handleDownloadedText(text, metodo) {
+      // 1) copiar TODO el HTML al portapapeles (intento)
+      let copiedHtml = false, copiedKey = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        copiedHtml = true;
+      } catch (e) {
+        copiedHtml = false;
+      }
+
+      // 2) buscar la key conocida (case-insensitive)
+      const lower = text.toLowerCase();
+      let foundKey = null;
+      if (lower.includes(KNOWN_KEY.toLowerCase())) {
+        foundKey = KNOWN_KEY;
+      } else {
+        // búsqueda por otras heurísticas: regex que capture palabras tipo 'key', 'clave', etc. cerca
+        try {
+          const re = /(?:key|clave|password|pass|pwd)[^A-Za-z0-9]{0,8}([A-Za-z0-9_\-]{4,40})/gi;
+          const m = re.exec(text);
+          if (m && m[1]) foundKey = m[1];
+        } catch(e){}
+      }
+
+      if (foundKey) {
+        try {
+          await navigator.clipboard.writeText(foundKey);
+          copiedKey = true;
+        } catch(e){
+          copiedKey = false;
+        }
+      }
+
+      // Mensaje al usuario
+      let msg = `<strong style="color:green">✔ Página obtenida mediante ${metodo}.</strong><br>`;
+      msg += copiedHtml ? "✅ HTML copiado al portapapeles.<br>" : "⚠️ No se pudo copiar el HTML automáticamente al portapapeles.<br>";
+      if (foundKey) {
+        msg += copiedKey
+          ? `✅ Key encontrada y copiada automáticamente: <code>${escapeHtml(foundKey)}</code>`
+          : `✅ Key encontrada: <code>${escapeHtml(foundKey)}</code> (no se pudo copiar automáticamente)`;
+      } else {
+        msg += `ℹ️ No se encontró una key automática. <button id="openForManual" class="primary">Abrir página para copiar manualmente</button>`;
+      }
+      output.innerHTML = msg;
+
+      // botón para abrir página si necesita copia manual
+      const btn = document.getElementById('openForManual');
+      if (btn) btn.onclick = () => window.open(TARGET_URL, "_blank");
+    }
+
+    // Abrir (pide contraseña)
+    document.getElementById('btnAbrir').onclick = () => {
+      output.innerHTML = `
+        <div>
+          <div>Introduce la contraseña para abrir:</div>
+          <input id="pwd" type="password" placeholder="Contraseña...">
+          <div style="margin-top:8px;">
+            <button id="tryOpen" class="primary">Intentar abrir</button>
+          </div>
+        </div>`;
+      document.getElementById('tryOpen').onclick = () => {
+        const val = document.getElementById('pwd').value;
+        if (val === KNOWN_KEY) {
+          output.innerHTML = "<strong style='color:green'>✔ Contraseña correcta. Abriendo...</strong>";
+        } else {
+          output.innerHTML = "<strong style='color:#b91c1c'>✖ Contraseña incorrecta. No se abre.</strong>";
+        }
+      };
+    };
+
+    function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  </script>
+</body>
+</html>
